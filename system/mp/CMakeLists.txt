@@ -27,8 +27,7 @@ project( mp )
 find_package(MPI REQUIRED)
 set (    SRCS 
          mpbase.cpp 
-         mpcomm.cpp
-         mpicomm.cpp 
+         mpcomm.cpp 
          mplog.cpp 
          mptag.cpp 
          mpi_wrapper.cpp         

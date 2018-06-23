@@ -25,7 +25,7 @@
 project( mptest ) 
 
 set (    SRCS 
-         mptest.cpp 
+         mptest_mpi.cpp 
     )
 
 include_directories ( 
