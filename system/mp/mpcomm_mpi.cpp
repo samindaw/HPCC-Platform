@@ -29,13 +29,6 @@
 //#include "jlib.hpp"
 #include <limits.h>
 
-//#include "jsocket.hpp"
-//#include "jmutex.hpp"
-//#include "jutil.hpp"
-//#include "jthread.hpp"
-//#include "jqueue.tpp"
-//#include "jsuperhash.hpp"
-//#include "jmisc.hpp"
 #include <unistd.h>
 
 #include "mpcomm.hpp"

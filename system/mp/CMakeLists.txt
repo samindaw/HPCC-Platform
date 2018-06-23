@@ -50,4 +50,5 @@ target_link_libraries ( mp
          ${MPI_CXX_LIBRARIES}
     )
 
+
 HPCC_ADD_SUBDIRECTORY(test "PLATFORM")

@@ -129,6 +129,7 @@ namespace hpcc_mpi{
 class NodeGroup: implements IGroup, public CInterface{
 private:
     MPI_Comm mpi_comm;
+		//TODO refactor the lists together
     std::vector<std::map<mptag_t, hpcc_mpi::CommRequest> > commRequests;
     std::map<int, std::map<mptag_t, hpcc_mpi::CommRequest> > commRequestsNonRank;
     

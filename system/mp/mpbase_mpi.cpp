@@ -26,6 +26,7 @@
 static INode *MyNode=NULL;
 static INode *NullNode=NULL;
 
+
 IGroup *createIGroup(rank_t num,INode **nodes){
     return new NodeGroup();
 }

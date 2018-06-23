@@ -208,8 +208,7 @@ void hpcc_mpi::initialize(){
     int required = MPI_THREAD_MULTIPLE;
     int provided;
     MPI_Init_thread(NULL,NULL, required, &provided);
-    // printf("expected=%d, provided=%d, %d, %d, %d, %d\n",required, provided, MPI_THREAD_SINGLE, MPI_THREAD_FUNNELED, MPI_THREAD_SERIALIZED, MPI_THREAD_MULTIPLE);
-     assertex(provided == required);
+    assertex(provided == required);
     // MPI_Init(NULL,NULL);
 }
 

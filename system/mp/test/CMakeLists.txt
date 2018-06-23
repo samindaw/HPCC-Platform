@@ -22,7 +22,6 @@
 #    Cmake Input File for mptest
 #####################################################
 
-
 project( mptest ) 
 
 set (    SRCS 

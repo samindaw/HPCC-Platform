@@ -166,10 +166,6 @@ CriticalSection recvCriticalSec;
 int getNextCount(CriticalSection &sect, int &count){
 	CriticalBlock block(sect);
 	return count--;
-//	if (count)
-//		return count--;
-//	else
-//		return -1;
 }
 
 void TEST_MT_simple_send_recv(ICommunicator* comm){
