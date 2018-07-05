@@ -3121,8 +3121,13 @@ mptag_t createReplyTag()
 
 ICommunicator *createCommunicator(IGroup *group, bool outer)
 {
-    assertex(globalMPServer);
-    return globalMPServer->createCommunicator(group, outer);
+    if (std::getenv(MPI_ENV))
+           return createMPICommunicator(group);
+    else
+    {
+        assertex(globalMPServer);
+        return globalMPServer->createCommunicator(group, outer);
+    }
 }
 
 StringBuffer &getReceiveQueueDetails(StringBuffer &buf)

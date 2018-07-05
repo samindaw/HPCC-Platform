@@ -38,6 +38,46 @@
 
 #include "mpi_wrapper.hpp"
 
+#ifdef _MSC_VER
+#pragma warning (disable : 4355)
+#endif
+
+//#define _TRACE
+//#define _FULLTRACE
+
+//#define _TRACEMPSERVERNOTIFYCLOSED
+//#define _TRACEORPHANS
+//
+//
+//#define REFUSE_STALE_CONNECTION
+//
+//
+//#define MP_PROTOCOL_VERSION    0x102
+//#define MP_PROTOCOL_VERSIONV6   0x202                   // extended for IPV6
+//
+//// These should really be configurable
+//#define CANCELTIMEOUT       1000             // 1 sec
+//#define CONNECT_TIMEOUT          (5*60*1000) // 5 mins
+//#define CONNECT_READ_TIMEOUT     (10*1000)   // 10 seconds. NB: used by connect readtms loop (see loopCnt)
+//#define CONNECT_TIMEOUT_INTERVAL 1000        // 1 sec
+//#define CONNECT_RETRYCOUNT       180         // Overall max connect time is = CONNECT_RETRYCOUNT * CONNECT_READ_TIMEOUT
+//#define CONNECT_TIMEOUT_MINSLEEP 2000        // random range: CONNECT_TIMEOUT_MINSLEEP to CONNECT_TIMEOUT_MAXSLEEP milliseconds
+//#define CONNECT_TIMEOUT_MAXSLEEP 5000
+//
+//#define CONFIRM_TIMEOUT          (90*1000) // 1.5 mins
+//#define CONFIRM_TIMEOUT_INTERVAL 5000 // 5 secs
+//#define TRACESLOW_THRESHOLD      1000 // 1 sec
+//
+//#define VERIFY_DELAY            (1*60*1000)  // 1 Minute
+//#define VERIFY_TIMEOUT          (1*60*1000)  // 1 Minute
+//
+//#define DIGIT1 U64C(0x10000000000) // (256ULL*256ULL*256ULL*65536ULL)
+//#define DIGIT2 U64C(0x100000000)   // (256ULL*256ULL*65536ULL)
+//#define DIGIT3 U64C(0x1000000)     // (256ULL*65536ULL)
+//#define DIGIT4 U64C(0x10000)       // (65536ULL)
+
+#define _TRACING
+
 class NodeCommunicator: public ICommunicator, public CInterface
 {
 private:
@@ -67,10 +107,10 @@ private:
             }
         }
     };
-    Owned<IGroup> group;
+    IGroup *group;
     rank_t myrank;
     rank_t commSize;
-    MPI::Comm& comm;
+    MPI_Comm comm;
     std::vector<SelfMessage*> selfMessages;
     CriticalSection selfMessagesLock;
 private:
@@ -108,7 +148,7 @@ public:
 
     bool send(CMessageBuffer &mbuf, rank_t dstrank, mptag_t tag, unsigned timeout)
     {
-        _TF("send", dstrank, tag, mbuf.getReplyTag(), timeout);
+        _TF("send", dstrank, tag, timeout);
         assertex(dstrank!=RANK_NULL);
         CTimeMon tm(timeout);
         rank_t startrank = dstrank;
@@ -164,7 +204,7 @@ public:
         CTimeMon tm(timeout);
         unsigned remaining;
         bool messageFromSelf = (srcrank == myrank);
-        bool success = false;
+        bool completed = false;
 
         if (messageFromSelf || srcrank == RANK_ALL)
         {
@@ -177,31 +217,34 @@ public:
             }
             if (msg)
             {
+                _T("Message found in self message list");
                 mbuf.clear();
+                _T("Buffer cleared");
                 assertex((msg->getMessage()) != NULL);
+                _T("Assert passed");
                 mptag_t reply = msg->getMessage()->getReplyTag();
+                _T("Reply tag from message = "<<reply);
                 mbuf.transferFrom(*(msg->getMessage()));
+                _T("Data copied to buffer");
                 mbuf.init(msg->getMessage()->getSender(),tag,reply);
+                _T("Initialized buffer");
                 delete msg;
-                success = true;
+                completed = true;
             }
         }
         if (!messageFromSelf)
         {
             tm.timedout(&remaining);
             hpcc_mpi::CommStatus status = hpcc_mpi::readData(srcrank, tag, mbuf, comm, remaining);
-            success = (status == hpcc_mpi::CommStatus::SUCCESS);
-            //TODO what if no message received and selfMsg bcomes available now for sender=RANK_ALL?
+            _T("recv status="<<status);
+            completed = (status == hpcc_mpi::CommStatus::SUCCESS);
+            //TODO what if no message received and selfMsg bcomes available now?
         }
-        if (success)
+        if (completed)
         {
-            const SocketEndpoint &ep = getGroup()->queryNode(srcrank).endpoint();
-            mbuf.init(ep, tag, mbuf.getReplyTag());
-            if (sender)
-                *sender = srcrank;
             mbuf.reset();
         }
-        return success;
+        return completed;
     }
     
     void barrier(void)
@@ -245,7 +288,7 @@ public:
     {
         _TF("reply", mbuf.getReplyTag(), timeout);
         mptag_t replytag = mbuf.getReplyTag();
-        rank_t dstrank = getGroup()->rank(mbuf.getSender());
+        rank_t dstrank = group->rank(mbuf.getSender());
         if (dstrank!=RANK_NULL)
         {
             if (send (mbuf, dstrank, replytag,timeout))
@@ -283,80 +326,46 @@ public:
 
     IGroup &queryGroup()
     {
-        return *(getGroup());
+        return *group;
     }
     
     IGroup *getGroup()
     {
-        return group.getLink();
+        return group;
     }
 
-    NodeCommunicator(IGroup *_group, MPI::Comm& _comm): comm(_comm),  group(_group)
+    NodeCommunicator(IGroup *_group, MPI_Comm _comm)
     {
-        initializeMPI(comm);
-
+        hpcc_mpi::initialize(true);
+        this->group = _group;
+        this->comm = _comm;
         commSize = hpcc_mpi::size(comm);
         myrank = hpcc_mpi::rank(comm);
-
-        assertex(getGroup()->ordinality()==commSize);
+        assertex(group->ordinality()==commSize);
     }
     
     ~NodeCommunicator()
     {
-        terminateMPI();
+        hpcc_mpi::finalize();
     }
 };
 
 ICommunicator *createMPICommunicator(IGroup *group)
 {
-    MPI::Comm& comm = MPI::COMM_WORLD;
-    if (group)
-        group->Link();
-    else
+    if (!group)
     {
-        initializeMPI(comm);
-        int size = hpcc_mpi::size(comm);
-        terminateMPI();
+        int size = hpcc_mpi::size(MPI_COMM_WORLD);
         INode* nodes[size];
         for(int i=0; i<size; i++)
         {
             SocketEndpoint ep(i);
             nodes[i] = createINode(ep);
         }
-        group = LINK(createIGroup(size, nodes));
+        group = createIGroup(size, nodes);
     }
-    return new NodeCommunicator(group, comm);
+    ICommunicator* comm = new NodeCommunicator(group, MPI_COMM_WORLD);
+    int rank = hpcc_mpi::rank(MPI_COMM_WORLD);
+    initMyNode(rank);
+    return comm;
 }
 
-/** MPI framework should be initialized only once. But incase it is initialized
-    multiple times we need to keep track of it such that it gets finalized only
-    at the last call for finalize
-    **/
-int mpiInitCounter = 0;
-CriticalSection initCounterBlock;
-
-void initializeMPI(MPI::Comm& comm)
-{
-    //Only initialize the framework once
-    CriticalBlock block(initCounterBlock);
-    if (!mpiInitCounter)
-        hpcc_mpi::initialize(true);
-    hpcc_mpi::setErrorHandler(comm, MPI::ERRORS_THROW_EXCEPTIONS);
-
-    mpiInitCounter++;
-}
-
-void terminateMPI()
-{
-    //Only finalize the framework once when everyone had requested to finalize it.
-    CriticalBlock block(initCounterBlock);
-    mpiInitCounter--;
-    if (mpiInitCounter == 0)
-        hpcc_mpi::finalize();
-    assertex(mpiInitCounter>=0);
-}
-
-int getMPIGlobalRank()
-{
-    return hpcc_mpi::rank(MPI::COMM_WORLD);
-}
