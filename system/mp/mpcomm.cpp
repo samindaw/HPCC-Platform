@@ -3121,7 +3121,7 @@ mptag_t createReplyTag()
 
 ICommunicator *createCommunicator(IGroup *group, bool outer)
 {
-    if (std::getenv(MPI_ENV))
+    if (getenv(MPI_ENV) && !outer)
            return createMPICommunicator(group);
     else
     {
