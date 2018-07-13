@@ -42,9 +42,6 @@
 #include "mputil.hpp"
 #include "mplog.hpp"
 
-//MPI implementation
-#include "mpicomm.hpp"
-
 #ifdef _MSC_VER
 #pragma warning (disable : 4355)
 #endif
