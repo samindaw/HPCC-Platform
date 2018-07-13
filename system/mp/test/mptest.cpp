@@ -1600,7 +1600,7 @@ int main(int argc, char* argv[])
     try {
         EnableSEHtoExceptionMapping();
         StringBuffer lf;
-
+        startMPI();
 #ifndef MYMACHINES
         rank_t tot_ranks = 0;
         int basePort = atoi(argL[1]);
@@ -1698,7 +1698,10 @@ int main(int argc, char* argv[])
                 j++;
             }
             if (!createNodeList(nodes, hostfile, my_port, max_ranks))
+            {
+                stopMPI();
                 return 1;
+            }
         }
         else
         {
@@ -1729,7 +1732,10 @@ int main(int argc, char* argv[])
         }
 
         if (die)
+        {
+            stopMPI();
             return 0;
+        }
         PrintLog("MPTEST: Starting, port = %d tot ranks = %u", my_port, tot_ranks);
         startMPServer(my_port);
 
@@ -1761,8 +1767,10 @@ int main(int argc, char* argv[])
         }
 
         stopMPServer();
+        stopMPI();
     }
     catch (IException *e) {
+        stopMPI();
         pexception("Exception",e);
     }
 

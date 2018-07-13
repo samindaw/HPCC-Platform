@@ -134,25 +134,16 @@ public:
         } else {
             endrank = startrank;
         }
-        _T("commSize="<<commSize);
         for (;startrank<=endrank;startrank++)
         {
-            if (startrank==myrank)
-            {
-                if (dstrank !=RANK_ALL_OTHER)
-                {
-                    CMessageBuffer *ret = mbuf.clone();
-                    addSelfMessage(new SelfMessage(tag, ret));
-                }
-            }else
-            {
+                if ((startrank==myrank) && (dstrank==RANK_ALL_OTHER))
+                    continue;
                 unsigned remaining;
                 if (tm.timedout(&remaining))
                     return false;
                 hpcc_mpi::CommStatus status = hpcc_mpi::sendData(startrank, tag, mbuf, comm, remaining);
                 if (status != hpcc_mpi::CommStatus::SUCCESS)
                     return false;
-            }
         }
        
         return true;
@@ -163,36 +154,11 @@ public:
         _TF("recv", srcrank, tag, timeout);
         CTimeMon tm(timeout);
         unsigned remaining;
-        bool messageFromSelf = (srcrank == myrank);
         bool success = false;
 
-        if (messageFromSelf || srcrank == RANK_ALL)
-        {
-            SelfMessage *msg = NULL;
-            while (msg == NULL && !tm.timedout(&remaining))
-            {
-                msg = popSelfMessage(tag);
-                if (!messageFromSelf)
-                    break; //if its not specifically from self, we should continue checking from other nodes
-            }
-            if (msg)
-            {
-                mbuf.clear();
-                assertex((msg->getMessage()) != NULL);
-                mptag_t reply = msg->getMessage()->getReplyTag();
-                mbuf.transferFrom(*(msg->getMessage()));
-                mbuf.init(msg->getMessage()->getSender(),tag,reply);
-                delete msg;
-                success = true;
-            }
-        }
-        if (!messageFromSelf)
-        {
-            tm.timedout(&remaining);
-            hpcc_mpi::CommStatus status = hpcc_mpi::readData(srcrank, tag, mbuf, comm, remaining);
-            success = (status == hpcc_mpi::CommStatus::SUCCESS);
-            //TODO what if no message received and selfMsg bcomes available now for sender=RANK_ALL?
-        }
+        tm.timedout(&remaining);
+        hpcc_mpi::CommStatus status = hpcc_mpi::readData(srcrank, tag, mbuf, comm, remaining);
+        success = (status == hpcc_mpi::CommStatus::SUCCESS);
         if (success)
         {
             const SocketEndpoint &ep = getGroup()->queryNode(srcrank).endpoint();
@@ -268,12 +234,14 @@ public:
 
     bool verifyConnection(rank_t rank,  unsigned timeout)
     {
-        UNIMPLEMENTED;
+        // TODO: revisit to see how MPI behaves here
+        return true;
     }
 
     bool verifyAll(bool duplex, unsigned timeout)
     {
-        UNIMPLEMENTED;
+        // TODO: revisit to see how MPI behaves here
+        return true;
     }
     
     void disconnect(INode *node)
@@ -293,7 +261,7 @@ public:
 
     NodeCommunicator(IGroup *_group, MPI::Comm& _comm): comm(_comm),  group(_group)
     {
-        initializeMPI(comm);
+        initializeComm(comm);
 
         commSize = hpcc_mpi::size(comm);
         myrank = hpcc_mpi::rank(comm);
@@ -303,7 +271,6 @@ public:
     
     ~NodeCommunicator()
     {
-        terminateMPI();
     }
 };
 
@@ -314,9 +281,8 @@ ICommunicator *createMPICommunicator(IGroup *group)
         group->Link();
     else
     {
-        initializeMPI(comm);
+        initializeComm(comm);
         int size = hpcc_mpi::size(comm);
-        terminateMPI();
         INode* nodes[size];
         for(int i=0; i<size; i++)
         {
@@ -335,28 +301,45 @@ ICommunicator *createMPICommunicator(IGroup *group)
 int mpiInitCounter = 0;
 CriticalSection initCounterBlock;
 
-void initializeMPI(MPI::Comm& comm)
+
+void startMPI()
 {
     //Only initialize the framework once
+    _TF("startMPI");
     CriticalBlock block(initCounterBlock);
     if (!mpiInitCounter)
         hpcc_mpi::initialize(true);
-    hpcc_mpi::setErrorHandler(comm, MPI::ERRORS_THROW_EXCEPTIONS);
-
+    hpcc_mpi::mpiInitializedCheck();
     mpiInitCounter++;
 }
 
-void terminateMPI()
+void stopMPI()
 {
     //Only finalize the framework once when everyone had requested to finalize it.
+    _TF("stopMPI");
     CriticalBlock block(initCounterBlock);
     mpiInitCounter--;
     if (mpiInitCounter == 0)
+    {
         hpcc_mpi::finalize();
+        hpcc_mpi::mpiFinalizedCheck();
+    } else
+        hpcc_mpi::mpiFinalizedCheck(false);
     assertex(mpiInitCounter>=0);
 }
 
+
+void initializeComm(MPI::Comm& comm)
+{
+    _TF("initializeComm");
+    hpcc_mpi::mpiInitializedCheck();
+    hpcc_mpi::setErrorHandler(comm, MPI::ERRORS_THROW_EXCEPTIONS);
+}
+
+
 int getMPIGlobalRank()
 {
+    _TF("getMPIGlobalRank");
+    hpcc_mpi::mpiInitializedCheck();
     return hpcc_mpi::rank(MPI::COMM_WORLD);
 }

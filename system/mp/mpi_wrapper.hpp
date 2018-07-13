@@ -119,6 +119,9 @@ namespace hpcc_mpi
     */    
     void barrier(MPI::Comm& comm);
 
+    void mpiInitializedCheck(bool isInitialized=true);
+
+    void mpiFinalizedCheck(bool isFinalized=true);
 }
 
 #endif /* MPI_WRAPPER_HPP */

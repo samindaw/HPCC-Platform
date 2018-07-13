@@ -21,14 +21,19 @@
 extern mp_decl ICommunicator *createMPICommunicator(IGroup *group);
 
 /**
- * Initialize the MPI framework with the provided MPI communicator
+ * Initialize the MPI framework
  */
-extern mp_decl void initializeMPI(MPI::Comm& comm);
+extern mp_decl void startMPI();
 
 /**
  * Finalize MPI framework
  */
-extern mp_decl void terminateMPI();
+extern mp_decl void stopMPI();
+
+/**
+ * Initialize the provided MPI communicator
+ */
+extern mp_decl void initializeComm(MPI::Comm& comm);
 
 /**
  * Get the global rank among all the MPI hosts

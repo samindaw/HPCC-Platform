@@ -135,8 +135,8 @@ std::vector<CommData*> popCommData(bool send, int rank, int tag, MPI::Comm& comm
    _TF("popCommData", rank, tag);
    CriticalBlock block(commDataLock);
    std::vector<CommData*> matchedResults = std::vector<CommData*>();
-   int size = asyncCommData.size();
-   for(int i=(size-1); i>=0; i--)
+   size_t size = asyncCommData.size();
+   for(size_t i=(size-1); i>=0; i--)
    {
        if (asyncCommData[i]->isEqual(send, rank, tag, comm))
            matchedResults.push_back(_popCommData(i));
@@ -162,7 +162,7 @@ CommData* popCommData(CommData * commData)
 
 //----------------------------------------------------------------------------------------------------------------------------//
 
-#define TAG_UB 100000 //INT_MAX //MPI_TAG_UB
+#define TAG_UB 1000000 //INT_MAX //MPI_TAG_UB
 int getRank(rank_t sourceRank)
 {
     _TF("getRank", sourceRank);
@@ -260,6 +260,7 @@ MPI::Status hasIncomingData(int sourceRank, int mptag, MPI::Comm& comm,
 bool hpcc_mpi::hasIncomingMessage(rank_t &sourceRank, mptag_t &mptag, MPI::Comm& comm)
 {
     _TF("hasIncomingMessage", sourceRank, mptag);
+    mpiInitializedCheck();
     bool incomingMessage = false; bool error = false; bool canceled = false;
     int source = getRank(sourceRank);
     int tag = getTag(mptag);
@@ -295,6 +296,7 @@ bool cancelComm(CommData* commData)
 bool hpcc_mpi::cancelComm(bool send, rank_t rank, mptag_t mptag, MPI::Comm& comm)
 {
     _TF("cancelComm", send, rank, mptag);
+    mpiInitializedCheck();
     int r = getRank(rank);
     int tag = getTag(mptag);
     std::vector<CommData*> commDataList = popCommData(send, r, tag, comm);
@@ -313,12 +315,14 @@ bool hpcc_mpi::cancelComm(bool send, rank_t rank, mptag_t mptag, MPI::Comm& comm
 rank_t hpcc_mpi::rank(MPI::Comm& comm)
 {
     _TF("rank");
+    mpiInitializedCheck();
     return comm.Get_rank();
 }
 
 rank_t hpcc_mpi::size(MPI::Comm& comm)
 {
     _TF("size");
+    mpiInitializedCheck();
     return comm.Get_size();
 }
 
@@ -328,6 +332,7 @@ void* mpi_buffer_data;
 void hpcc_mpi::initialize(bool withMultithreading)
 {
     _TF("initialize", withMultithreading);
+    mpiInitializedCheck(false);
     if (withMultithreading)
     {
         int required = MPI_THREAD_MULTIPLE;
@@ -346,12 +351,14 @@ void hpcc_mpi::initialize(bool withMultithreading)
 
 void hpcc_mpi::setErrorHandler(MPI::Comm& comm, MPI::Errhandler handler)
 {
+    mpiInitializedCheck();
     comm.Set_errhandler(handler);
 }
 
 void hpcc_mpi::finalize()
 {
     _TF("finalize");
+    mpiInitializedCheck();
     int size;
     void *ptr;
 
@@ -384,6 +391,7 @@ mptag_t popMPTag(CMessageBuffer &mbuf)
 hpcc_mpi::CommStatus hpcc_mpi::sendData(rank_t dstRank, mptag_t mptag, CMessageBuffer &mbuf, MPI::Comm& comm, unsigned timeout)
 {
     _TF("sendData", dstRank, mptag, mbuf.getReplyTag(), timeout);
+    mpiInitializedCheck();
     CTimeMon tm(timeout);
     unsigned remaining;
     int target = getRank(dstRank); int tag = getTag(mptag);
@@ -442,6 +450,7 @@ hpcc_mpi::CommStatus hpcc_mpi::sendData(rank_t dstRank, mptag_t mptag, CMessageB
 hpcc_mpi::CommStatus hpcc_mpi::readData(rank_t &sourceRank, mptag_t &mptag, CMessageBuffer &mbuf, MPI::Comm& comm, unsigned timeout)
 {
     _TF("readData", sourceRank, mptag, timeout);
+    mpiInitializedCheck();
     CTimeMon tm(timeout);
     unsigned remaining;
     bool incomingMessage = false; bool error = false; bool completed = false; bool canceled = false; bool timedout = false;
@@ -509,5 +518,16 @@ hpcc_mpi::CommStatus hpcc_mpi::readData(rank_t &sourceRank, mptag_t &mptag, CMes
 void hpcc_mpi::barrier(MPI::Comm& comm)
 {
     _TF("barrier");
+    mpiInitializedCheck();
     comm.Barrier();
+}
+
+void hpcc_mpi::mpiInitializedCheck(bool isInitialized) {
+//    _TF("mpiInitializedCheck",isInitialized);
+    assert(MPI::Is_initialized() == isInitialized);
+}
+
+void hpcc_mpi::mpiFinalizedCheck(bool isFinalized){
+//    _TF("mpiFinalizedCheck",isFinalized);
+    assert(MPI::Is_finalized() == isFinalized);
 }
