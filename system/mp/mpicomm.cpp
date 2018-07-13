@@ -41,68 +41,11 @@
 class NodeCommunicator: public ICommunicator, public CInterface
 {
 private:
-    class SelfMessage
-    {
-        mptag_t mptag;
-        CMessageBuffer* message = NULL;
-    public:
-        SelfMessage(mptag_t _tag, CMessageBuffer* _message): mptag(_tag), message(_message){};
-        bool isTag(mptag_t _tag)
-        {
-            return mptag == _tag;
-        }
-        CMessageBuffer *getMessage()
-        {
-            return message;
-        }
-        mptag_t tag()
-        {
-            return mptag;
-        }
 
-        ~SelfMessage()
-        {
-            if (message){
-                delete message;
-            }
-        }
-    };
     Owned<IGroup> group;
     rank_t myrank;
     rank_t commSize;
     MPI::Comm& comm;
-    std::vector<SelfMessage*> selfMessages;
-    CriticalSection selfMessagesLock;
-private:
-    void addSelfMessage(SelfMessage *selfMessage)
-    {
-        _TF("addSelfMessage", selfMessage->tag());
-        CriticalBlock block(selfMessagesLock);
-        selfMessages.push_back(selfMessage);
-    }
-
-    SelfMessage *popSelfMessage(mptag_t tag)
-    {
-        _TF("popSelfMessage", tag);
-        CriticalBlock block(selfMessagesLock);
-        int index = -1;
-        for(int i=0; i< selfMessages.size(); i++)
-        {
-            if (selfMessages[i]->isTag(tag))
-            {
-                index = i;
-                break;
-            }
-        }
-        SelfMessage *ret = NULL;
-        if (index != -1)
-        {
-            ret = selfMessages[index];
-            selfMessages.erase(selfMessages.begin()+index);
-        }
-        return ret;
-    }
-
 public:
     IMPLEMENT_IINTERFACE;
 
