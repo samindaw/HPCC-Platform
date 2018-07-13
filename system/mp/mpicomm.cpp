@@ -194,7 +194,7 @@ public:
 
     IGroup &queryGroup()
     {
-        return *(getGroup());
+        return *group;
     }
     
     IGroup *getGroup()
@@ -219,22 +219,9 @@ public:
 
 ICommunicator *createMPICommunicator(IGroup *group)
 {
-    MPI::Comm& comm = MPI::COMM_WORLD;
     if (group)
         group->Link();
-    else
-    {
-        initializeComm(comm);
-        int size = hpcc_mpi::size(comm);
-        INode* nodes[size];
-        for(int i=0; i<size; i++)
-        {
-            SocketEndpoint ep(i);
-            nodes[i] = createINode(ep);
-        }
-        group = LINK(createIGroup(size, nodes));
-    }
-    return new NodeCommunicator(group, comm);
+    return new NodeCommunicator(group, MPI::COMM_WORLD);
 }
 
 /** MPI framework should be initialized only once. But incase it is initialized
@@ -251,7 +238,7 @@ void startMPI()
     _TF("startMPI");
     CriticalBlock block(initCounterBlock);
     if (!mpiInitCounter)
-        hpcc_mpi::initialize(true);
+        hpcc_mpi::initialize();
     hpcc_mpi::mpiInitializedCheck();
     mpiInitCounter++;
 }
