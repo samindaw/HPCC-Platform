@@ -139,8 +139,8 @@ CommData* popCommData(CommData * commData)
 {
     _TF("popCommData(CommData * commData)", commData->rank, commData->tag);
     CriticalBlock block(commDataLock);
-    int size = asyncCommData.size();
-    for(int i=(size-1); i>=0; i--)
+    size_t size = asyncCommData.size();
+    for(size_t i=(size-1); i>=0; i--)
     {
         if (asyncCommData[i]==commData)
         {
