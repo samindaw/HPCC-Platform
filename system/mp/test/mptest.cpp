@@ -13,21 +13,12 @@
 #include <string>
 #include <algorithm>
 #include <queue>
-
+#include <map>
 #include "mplog.hpp"
 
 using namespace std;
 
-#define MPPORT 8888
-
-//#define MULTITEST
-//#define STREAMTEST
-//#define MPRING
-//#define MPALLTOALL
-//#define MPTEST2
-//#define GPF
-#define DYNAMIC_TEST
-
+// Testnames
 #define TEST_AlltoAll "AlltoAll"
 #define TEST_STREAM "Stream"
 #define TEST_MULTI "Multi"
@@ -41,15 +32,14 @@ using namespace std;
 #define TEST_MULTI_MT "MTMultiSendRecv"
 #define TEST_NXN "NxN"
 
-#ifdef MULTITEST
-//#define MYMACHINES "10.150.10.16,10.150.10.17,10.150.10.18,10.150.10.19,10.150.10.20,10.150.10.21,10.150.10.22,10.150.10.23,10.150.10.47,10.150.10.48,10.150.10.49,10.150.10.50,10.150.10.51,10.150.10.52,10.150.10.53,10.150.10.54,10.150.10.55,10.150.10.73,10.150.10.75,10.150.10.79"
-//#define MYMACHINES "192.168.16.124,10.150.10.17,10.150.10.18,10.150.10.19,10.150.10.20,10.150.10.21,10.150.10.22,10.150.10.23,10.150.10.47,10.150.10.48,10.150.10.49,10.150.10.50,10.150.10.51,10.150.10.52,10.150.10.53,10.150.10.54,10.150.10.55,10.150.10.73,10.150.10.75,10.150.10.79"
-#endif
-
-// #define aWhile 100000
-#define aWhile 10
-
-
+// Test parameters
+#define PARAM_BUFF_SIZE "buffsize"
+#define PARAM_NUM_ITERS "numiters"
+#define PARAM_MAX_RANKS "max_ranks"
+#define PARAM_INPUT_RANK "inputRank"
+#define PARAM_NUM_STREAMS "numStreams"
+#define PARAM_PERSTREAM_MB_SIZE "perStreamMBSize"
+#define PARAM_ASYNC "async"
 
 class CSectionTimer
 {
@@ -1392,10 +1382,40 @@ void MPNxN(ICommunicator *comm, unsigned numStreams, size32_t perStreamMBSize, s
     }
 }
 
+class TestParameter
+{
+private:
+    unsigned v1 = 0;
+    rank_t v2 = 0;
+    bool v3 = false;
+    size32_t v4 = 0;
+public:
+//    template<typename T>
+//    void operator=(T v)
+//    {
+//        set<T>(v);
+//    }
+//    template<>
+//    void set<unsigned>(unsigned v){v1 = v;}
+//    template<>
+//    void set<rank_t>(rank_t v){v2 = v;}
+//    template<>
+//    void set<bool>(bool v){v3 = v;}
+//    template<>
+//    void set<size_t>(size_t v){v4 = v;}
+
+    void setUnsigned(unsigned v){v1 = v;}
+    unsigned getUnsigned(){return v1;}
+    void setRank(rank_t v){v2 = v;}
+    rank_t getRank(){return v2;}
+    void setBool(bool v){v3 = v;}
+    bool getBool(){return v3;}
+    void setSize(size_t v){v4 = v;}
+    size_t getSize(){return v4;}
+};
 
 void runTest(const char *caption, char testname[256], const Owned<IGroup>& group,
-        ICommunicator* comm, unsigned numiters,
-        size32_t buffsize, rank_t inputRank, unsigned numStreams, unsigned perStreamMBSize, bool async)
+        ICommunicator* comm, std::map<std::string, TestParameter> &parameters)
 {
     if (group.get()->rank()==0)
     {
@@ -1404,75 +1424,39 @@ void runTest(const char *caption, char testname[256], const Owned<IGroup>& group
         PrintLog("========================");
     }
     comm->barrier();
-#ifdef STREAMTEST
-        StreamTest(group,comm);
-#else
-# ifdef MULTITEST
+
+    if (strnicmp(testname, TEST_STREAM, 6) == 0)
+        StreamTest(group, comm);
+    else if (strnicmp(testname, TEST_MULTI, 5) == 0)
         MultiTest(comm);
-# else
-#  ifdef MPRING
-        MPRing(group, comm, numiters);
-#  else
-#   ifdef MPALLTOALL
-        MPAlltoAll(group, comm, buffsize, numiters);
-#   else
-#    ifdef MPTEST2
+    else if (strieq(testname, "MPRing") || strieq(testname, TEST_RING))
+        MPRing(group, comm, parameters[PARAM_NUM_ITERS].getUnsigned());
+    else if (strieq(testname, "MPAlltoAll") || strieq(testname, TEST_AlltoAll))
+        MPAlltoAll(group, comm, parameters[PARAM_BUFF_SIZE].getSize(), parameters[PARAM_NUM_ITERS].getUnsigned());
+    else if (strieq(testname, "MPTest2") || strieq(testname, TEST_RANK))
         MPTest2(group, comm);
-#    else
-#     ifdef DYNAMIC_TEST
-        if (strnicmp(testname, TEST_STREAM, 6) == 0)
-            StreamTest(group, comm);
-        else if (strnicmp(testname, TEST_MULTI, 5) == 0)
-            MultiTest(comm);
-        else if (strieq(testname, "MPRing") || strieq(testname, TEST_RING))
-            MPRing(group, comm, numiters);
-        else if (strieq(testname, "MPAlltoAll") || strieq(testname, TEST_AlltoAll))
-            MPAlltoAll(group, comm, buffsize, numiters);
-        else if (strieq(testname, "MPTest2") || strieq(testname, TEST_RANK))
-            MPTest2(group, comm);
-        else if (strieq(testname, TEST_SELFSEND))
-            MPSelfSend(comm);
-        else if (strieq(testname, TEST_SINGLE_SEND) )
-            Test1(group, comm);
-        else if ( strieq(testname, TEST_RIGHT_SHIFT) )
-            MPRightShift(comm);
-        else if ( strieq(testname, TEST_RECV_FROM_ANY) )
-            MPReceiveFromAny(comm, inputRank);
-        else if ( strieq(testname, TEST_SEND_TO_ALL) )
-            MPSendToAll(comm, inputRank);
-        else if ( strieq(testname, TEST_MULTI_MT) )
-            MPMultiMTSendRecv(comm, numiters);
-        else if ( strieq(testname, "MPNxN") || strieq(testname, TEST_NXN) )
-            MPNxN(comm, numStreams, perStreamMBSize, buffsize, async);
-        else if ((int) (strlen(testname)) > 0)
-            PrintLog("MPTEST: Error, invalid testname specified (-t %s)", testname);
-        else
-            // default is MPRing ...
-            MPRing(group, comm, numiters);
-#     else
-        for (unsigned i = 0;i<1;i++)
-        {
-            Test1(group,comm);
-            PrintLog("MPTEST: test1 done, waiting"); Sleep(aWhile);
-            Test2(group,comm);
-            PrintLog("MPTEST: test2 done, waiting"); Sleep(aWhile);
-            Test3(group,comm);
-            PrintLog("MPTEST: test3 done, waiting"); Sleep(aWhile);
-            Test4(group,comm);
-            PrintLog("MPTEST: test4 done, waiting"); Sleep(aWhile);
-            Test5(group,comm);
-            PrintLog("MPTEST: test5 done, waiting"); Sleep(aWhile);
-            Test6(group,comm);
-            PrintLog("MPTEST: test6 done, waiting"); Sleep(aWhile);
-            Test7(group,comm);
-            PrintLog("MPTEST: test7 done, waiting"); Sleep(aWhile);
-        }
-#     endif
-#    endif
-#   endif
-#  endif
-# endif
-#endif
+    else if (strieq(testname, TEST_SELFSEND))
+        MPSelfSend(comm);
+    else if (strieq(testname, TEST_SINGLE_SEND) )
+        Test1(group, comm);
+    else if ( strieq(testname, TEST_RIGHT_SHIFT) )
+        MPRightShift(comm);
+    else if ( strieq(testname, TEST_RECV_FROM_ANY) )
+        MPReceiveFromAny(comm, parameters[PARAM_INPUT_RANK].getRank());
+    else if ( strieq(testname, TEST_SEND_TO_ALL) )
+        MPSendToAll(comm, parameters[PARAM_INPUT_RANK].getRank());
+    else if ( strieq(testname, TEST_MULTI_MT) )
+        MPMultiMTSendRecv(comm, parameters[PARAM_NUM_ITERS].getUnsigned());
+    else if ( strieq(testname, "MPNxN") || strieq(testname, TEST_NXN) )
+        MPNxN(comm, parameters[PARAM_NUM_STREAMS].getUnsigned(),
+                parameters[PARAM_PERSTREAM_MB_SIZE].getUnsigned(),
+                parameters[PARAM_BUFF_SIZE].getSize(),
+                parameters[PARAM_ASYNC].getBool());
+    else if ((int) (strlen(testname)) > 0)
+        PrintLog("MPTEST: Error, invalid testname specified (-t %s)", testname);
+    else
+        // default is MPRing ...
+        MPRing(group, comm, parameters[PARAM_NUM_ITERS].getUnsigned());
     comm->barrier();
 }
 
@@ -1528,18 +1512,27 @@ void printHelp(char* executableName) {
     printf("\n");
 }
 
+TestParameter &initParam(std::map<std::string, TestParameter> &parameters, std::string paramName)
+{
+    if (parameters.find(paramName)==parameters.end())
+        parameters[paramName] = TestParameter();
+    return parameters[paramName];
+}
+
 int main(int argc, char* argv[])
 {
     int mpi_debug = 0;
+    std::map<std::string, TestParameter> parameters;
+    // Test parameters
     char testname[256] = { "" };
-    size32_t buffsize = 0;
-    unsigned numiters = 0;
-    rank_t max_ranks = 0;
-    rank_t inputRank = 0;
-    unsigned numStreams = 0;
-    unsigned perStreamMBSize = 0;
+    initParam(parameters, PARAM_BUFF_SIZE).setSize(0);
+    initParam(parameters, PARAM_NUM_ITERS).setUnsigned(0);
+    initParam(parameters, PARAM_MAX_RANKS).setRank(0);
+    initParam(parameters, PARAM_INPUT_RANK).setRank(0);
+    initParam(parameters, PARAM_NUM_STREAMS).setUnsigned(0);
+    initParam(parameters, PARAM_PERSTREAM_MB_SIZE).setUnsigned(0);
+    initParam(parameters, PARAM_ASYNC).setBool(false);
 
-    bool async = false;
     bool useMPI = false;
     bool useMP = false;
 
@@ -1590,18 +1583,15 @@ int main(int argc, char* argv[])
     int argSize = argc;
     char** argL = argv;
 
-#ifndef MYMACHINES
     if (argSize<3) {
         printHelp(argv[0]);
         return 0;
     }
-#endif
 
     try {
         EnableSEHtoExceptionMapping();
         StringBuffer lf;
         startMPI();
-#ifndef MYMACHINES
         rank_t tot_ranks = 0;
         int basePort = atoi(argL[1]);
 
@@ -1641,7 +1631,7 @@ int main(int argc, char* argv[])
                 {
                     if ((j+1) < argSize)
                     {
-                        buffsize = atoi(argL[j+1]);
+                        parameters[PARAM_BUFF_SIZE].setSize(atoi(argL[j+1]));
                         j++;
                     }
                 }
@@ -1649,7 +1639,7 @@ int main(int argc, char* argv[])
                 {
                     if ((j+1) < argSize)
                     {
-                        numiters = atoi(argL[j+1]);
+                        parameters[PARAM_NUM_ITERS].setUnsigned(atoi(argL[j+1]));
                         j++;
                     }
                 }
@@ -1657,7 +1647,7 @@ int main(int argc, char* argv[])
                 {
                     if ((j+1) < argSize)
                     {
-                        max_ranks = atoi(argL[j+1]);
+                        parameters[PARAM_MAX_RANKS].setRank(atoi(argL[j+1]));
                         j++;
                     }
                 }
@@ -1665,7 +1655,7 @@ int main(int argc, char* argv[])
                 {
                     if ((j+1) < argSize)
                     {
-                        inputRank = atoi(argL[j+1]);
+                        parameters[PARAM_INPUT_RANK].setRank(atoi(argL[j+1]));
                         j++;
                     }
                 }
@@ -1681,7 +1671,7 @@ int main(int argc, char* argv[])
                 {
                     if ((j+1) < argc)
                     {
-                        numStreams = atoi(argv[j+1]);
+                        parameters[PARAM_NUM_STREAMS].setUnsigned(atoi(argv[j+1]));
                         j++;
                     }
                 }
@@ -1689,15 +1679,15 @@ int main(int argc, char* argv[])
                 {
                     if ((j+1) < argc)
                     {
-                        perStreamMBSize = atoi(argv[j+1]);
+                        parameters[PARAM_PERSTREAM_MB_SIZE].setUnsigned(atoi(argv[j+1]));
                         j++;
                     }
                 }
                 else if (streq(argv[j], "-a"))
-                    async = true;
+                    parameters[PARAM_ASYNC].setBool(true);
                 j++;
             }
-            if (!createNodeList(nodes, hostfile, my_port, max_ranks))
+            if (!createNodeList(nodes, hostfile, my_port, parameters[PARAM_MAX_RANKS].getRank()))
             {
                 stopMPI();
                 return 1;
@@ -1719,7 +1709,6 @@ int main(int argc, char* argv[])
         Owned<IGroup> group = createIGroup(tot_ranks, nodes.getArray());
 
         // stop if not meant for this host ...
-
         IpAddress myIp;
         GetHostIp(myIp);
         SocketEndpoint myEp(my_port, myIp);
@@ -1748,22 +1737,17 @@ int main(int argc, char* argv[])
                 PrintLog("MPTEST: adding node %u, %s", k, urlStr.str());
             }
         }
-#else
-        openLogFile(lf, "mptest.log");
-        startMPServer(MPPORT);
-        Owned<IGroup> group = createIGroup(MYMACHINES,MPPORT);
-#endif
 
         Owned<ICommunicator> comm;
         if (useMP || !(useMP || useMPI))
         {
             comm.setown(createCommunicator(group));
-            runTest("MPTEST: Running MP Test:", testname, group, comm, numiters, buffsize, inputRank, numStreams, perStreamMBSize, async);
+            runTest("MPTEST: Running MP Test:", testname, group, comm, parameters);
         }
         if (useMPI || !(useMP || useMPI))
         {
             comm.setown(createMPICommunicator(group));
-            runTest("MPTEST: Running MPI Test:", testname, group, comm, numiters, buffsize, inputRank, numStreams, perStreamMBSize, async);
+            runTest("MPTEST: Running MPI Test:", testname, group, comm, parameters);
         }
 
         stopMPServer();
