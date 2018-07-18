@@ -30,6 +30,22 @@
 
 #define MIGRATE_JOIN_CONDITIONS             // This works, but I doubt it is generally worth the effort. - maybe on a flag.
 //#define TRACE_USAGE
+//#define VERIFY_SELECTORS_UPDATED          // Uncomment this to help catch problems when selectors become inconsistent
+
+#ifdef _DEBUG
+//#define TRACK_EXPR_SEQ  nnnnn
+#endif
+//#define CHECK_USAGE_COUNT                 // For tracking down issues where usage count is inconsistent (may fail for datasets child queries)
+
+#ifdef TRACK_EXPR_SEQ
+void CHECK_EXPR_ID(IHqlExpression * expr)
+{
+    if (querySeqId(expr->queryBody()) == TRACK_EXPR_SEQ)
+        expr->numChildren(); // Add a breakpoint on this line to check whenever usage count for the expression changes
+}
+#else
+#define CHECK_EXPR_ID(expr)
+#endif
 
 /*
 Notes:
@@ -1166,51 +1182,61 @@ IHqlExpression * CTreeOptimizer::getHoistedFilter(IHqlExpression * transformed, 
             }
         }
 
-        if (!matched && !expandMonitor.isComplex())
+        try
         {
-            OwnedHqlExpr leftMappedFilter = replaceSelector(expandedFilter, leftSelector, activeLeft);
-            OwnedHqlExpr rightMappedFilter = replaceSelector(expandedFilter, rightSelector, activeRight);
+            if (!matched && !expandMonitor.isComplex())
+            {
+                OwnedHqlExpr leftMappedFilter = replaceSelector(expandedFilter, leftSelector, activeLeft);
+                OwnedHqlExpr rightMappedFilter = replaceSelector(expandedFilter, rightSelector, activeRight);
 
-            //MORE: Could also take join conditions into account to sent filter up both sides;
-            if (rightMappedFilter==expandedFilter)
-            {
-                //Only contains LEFT.
-                if (canHoistLeft)
+                //MORE: Could also take join conditions into account to sent filter up both sides;
+                if (rightMappedFilter==expandedFilter)
                 {
-                    leftFilters.append(*LINK(leftMappedFilter));
-                    matched = true;
+                    //Only contains LEFT.
+                    if (canHoistLeft)
+                    {
+                        leftFilters.append(*LINK(leftMappedFilter));
+                        matched = true;
+                    }
+                    else if (canMergeLeft && (conditionIndex != NotFound))
+                    {
+                        expanded.append(*LINK(expandedFilter));
+                        matched = true;
+                    }
+                    //If the filter expression is invariant of left and right then hoist up both paths.
+                    if (leftMappedFilter==expandedFilter && canHoistRight)
+                    {
+                        rightFilters.append(*LINK(expandedFilter));
+                        matched = true;
+                    }
                 }
-                else if (canMergeLeft && (conditionIndex != NotFound))
+                else if (leftMappedFilter==expandedFilter)
+                {
+                    //Only contains RIGHT.
+                    if (canHoistRight)
+                    {
+                        rightFilters.append(*LINK(rightMappedFilter));
+                        matched = true;
+                    }
+                    else if (canMergeRight && (conditionIndex != NotFound))
+                    {
+                        expanded.append(*LINK(expandedFilter));
+                        matched = true;
+                    }
+                }
+                else if (canMergeLeft && canMergeRight && conditionIndex != NotFound)
                 {
                     expanded.append(*LINK(expandedFilter));
                     matched = true;
                 }
-                //If the filter expression is invariant of left and right then hoist up both paths.
-                if (leftMappedFilter==expandedFilter && canHoistRight)
-                {
-                    rightFilters.append(*LINK(expandedFilter));
-                    matched = true;
-                }
             }
-            else if (leftMappedFilter==expandedFilter)
-            {
-                //Only contains RIGHT.
-                if (canHoistRight)
-                {
-                    rightFilters.append(*LINK(rightMappedFilter));
-                    matched = true;
-                }
-                else if (canMergeRight && (conditionIndex != NotFound))
-                {
-                    expanded.append(*LINK(expandedFilter));
-                    matched = true;
-                }
-            }
-            else if (canMergeLeft && canMergeRight && conditionIndex != NotFound)
-            {
-                expanded.append(*LINK(expandedFilter));
-                matched = true;
-            }
+        }
+        catch (IException * e)
+        {
+            if (e->errorCode() != HQLERR_PotentialAmbiguity)
+                throw;
+            e->Release();
+            matched = false;
         }
 
         if (!matched)
@@ -1668,6 +1694,8 @@ bool CTreeOptimizer::decUsage(IHqlExpression * expr)
     if (expr->isDataset() || expr->isDatarow())
         DBGLOG("%lx dec %d [%s]", (unsigned)expr, extra->useCount, queryNode0Text(expr));
 #endif
+    CHECK_EXPR_ID(expr);
+
     if (extra->useCount)
         return extra->useCount-- == 1;
     return false;
@@ -1686,6 +1714,7 @@ bool CTreeOptimizer::incUsage(IHqlExpression * expr)
     if (expr->isDataset() || expr->isDatarow())
         DBGLOG("%lx inc %d [%s]", (unsigned)expr, extra->useCount, queryNode0Text(expr));
 #endif
+    CHECK_EXPR_ID(expr);
     return (extra->useCount++ != 0);
 }
 
@@ -1704,6 +1733,7 @@ IHqlExpression * CTreeOptimizer::inheritUsage(IHqlExpression * newExpr, IHqlExpr
     if ((oldExtra->useCount == 0) && (newExpr->isDataset() || newExpr->isDatarow()))
         DBGLOG("Inherit0: %lx inherit %d,%d (from %lx)", (unsigned)newExpr, newExtra->useCount, oldExtra->useCount, (unsigned)oldExpr);
 #endif
+    CHECK_EXPR_ID(newExpr);
     newExtra->useCount += oldExtra->useCount;
     return newExpr;
 }
@@ -1813,7 +1843,11 @@ IHqlExpression * CTreeOptimizer::optimizeAggregateCompound(IHqlExpression * tran
         }
     }
     if (newOp)
-        return createDataset(newOp, removeChildNode(transformed));
+    {
+        OwnedHqlExpr modified = removeChildNode(transformed);
+        incUsage(modified);
+        return createDataset(newOp, modified.getClear());
+    }
     return NULL;
 }
 
@@ -2082,6 +2116,16 @@ IHqlExpression * CTreeOptimizer::inheritSkips(IHqlExpression * newTransform, IHq
 
 IHqlExpression * CTreeOptimizer::createTransformed(IHqlExpression * expr)
 {
+    IHqlExpression * body = expr->queryBody();
+    if (expr != body)
+    {
+        OwnedHqlExpr transformed = transform(body);
+        if (transformed == body)
+            return LINK(expr);
+        return expr->cloneAllAnnotations(transformed);
+    }
+
+
     node_operator op = expr->getOperator();
     switch (op)
     {
@@ -2092,7 +2136,20 @@ IHqlExpression * CTreeOptimizer::createTransformed(IHqlExpression * expr)
 
     //Do this first, so that any references to a child dataset that changes are correctly updated, before proceeding any further.
     OwnedHqlExpr dft = defaultCreateTransformed(expr);
+
+#ifdef VERIFY_SELECTORS_UPDATED
+    LinkedHqlExpr savedDft = dft;
+#endif
+
     updateOrphanedSelectors(dft, expr);
+
+#ifdef VERIFY_SELECTORS_UPDATED
+    if (isIndependentOfScope(expr) && !isIndependentOfScope(dft))
+    {
+        EclIR::dump_irn(3, expr, savedDft.get(), dft.get());
+        throwUnexpectedX(!isIndependentOfScope(savedDft) ? "doCreateTransform" : "updateOrphan");
+    }
+#endif
 
     OwnedHqlExpr ret = doCreateTransformed(dft, expr);
     if (ret->queryBody() == expr->queryBody())
@@ -2425,7 +2482,7 @@ IHqlExpression * CTreeOptimizer::doCreateTransformed(IHqlExpression * transforme
             }
 
             //MORE: The OHOinsidecompound isn't really good enough - because might remove projects from
-            //nested child aggregates which could benifit from them.  Probably not as long as all compound 
+            //nested child aggregates which could benefit from them.  Probably not as long as all compound
             //activities support aggregation.  In fact test should be removable everywhere once all 
             //engines support the new activities.
             if (isGrouped(transformed->queryChild(0)) || (queryRealChild(transformed, 3) && !(options & HOOinsidecompound)))
@@ -4068,6 +4125,22 @@ bool CTreeOptimizer::isShared(IHqlExpression * expr)
     case no_commonspill:
         return true;
     }
+
+#ifdef CHECK_USEAGE_COUNT
+    //Note: This currently fails when transforms are merged, because the new datasets in the merged transforms do not
+    //inherit the usage counts from datasets that have new expressions.
+    if (queryBodyExtra(expr)->useCount == 0)
+        throwUnexpected();
+#endif
+
+#if 0
+    //If enabled this prevents transformed datasets in child queries from being optimized.  In some cases that is correct
+    //in others it is invalid.  Some false positives can be avoided by repeatedly optimizing expressions.
+    //Revisit again with HPCC-20054.
+    if (queryBodyExtra(expr)->useCount == 0)
+        return true;
+#endif
+
     return (queryBodyExtra(expr)->useCount > 1);
 }
 

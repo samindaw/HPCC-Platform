@@ -37,19 +37,19 @@ public:
     Cws_config2Ex();
     virtual ~Cws_config2Ex();
 
-    virtual bool onGetNode(IEspContext &context, IEspNodeRequest &req, IEspGetNodeResponse &resp);
+    virtual bool onGetNode(IEspContext &context, IEspGetNodeRequest &req, IEspGetNodeResponse &resp);
     virtual bool onSetValues(IEspContext &context, IEspSetValuesRequest &req, IEspStatusResponse &resp);
-    virtual bool onGetParents(IEspContext &context, IEspNodeRequest &req, IEspGetParentsResponse &resp);
+    virtual bool onGetParents(IEspContext &context, IEspGetParentsRequest &req, IEspGetParentsResponse &resp);
     virtual bool onInsertNode(IEspContext &context, IEspInsertNodeRequest &req, IEspGetNodeResponse &resp);
     virtual bool onRemoveNode(IEspContext &context, IEspRemoveNodeRequest &req, IEspStatusResponse &resp);
 
     virtual bool onOpenSession(IEspContext &context, IEspOpenSessionRequest &req, IEspOpenSessionResponse &resp);
     virtual bool onCloseSession(IEspContext &context, IEspCloseSessionRequest &req, IEspEmptyResponse &resp);
-    virtual bool onGetEnvironmentFileList(IEspContext &context, IEspCommonSessionRequest &req, IEspGetEnvironmentListResponse &resp);
+    virtual bool onGetEnvironmentFileList(IEspContext &context, IEspGetEnvironmentFileListRequest &req, IEspGetEnvironmentListResponse &resp);
     virtual bool onOpenEnvironmentFile(IEspContext &context, IEspOpenEnvironmentFileRequest &req, IEspOpenEnvironmentFileResponse &resp);
     virtual bool onCloseEnvironmentFile(IEspContext &context, IEspCloseEnvironmentFileRequest &req, IEspEmptyResponse &resp);
     virtual bool onSaveEnvironmentFile(IEspContext &context, IEspSaveEnvironmentFileRequest &req, IEspEmptyResponse &resp);
-    virtual bool onLockSession(IEspContext &context, IEspCommonSessionRequest &req, IEspLockSessionResponse &resp);
+    virtual bool onLockSession(IEspContext &context, IEspLockSessionRequest &req, IEspLockSessionResponse &resp);
     virtual bool onUnlockSession(IEspContext &context, IEspUnlockSessionRequest &req, IEspEmptyResponse &resp);
     virtual bool onValidateEnvironment(IEspContext &context, IEspValidateEnvironmentRequest &req, IEspStatusResponse &resp);
     virtual bool onGetOpenSessions(IEspContext &context, IEspListOpenSessionsRequest &req, IEspListOpenSessionsResponse &resp);
@@ -66,7 +66,7 @@ private:
     void getNodeResponse(const std::shared_ptr<EnvironmentNode> &pNode, IEspGetNodeResponse &resp) const;
     void getNodeInfo(const std::shared_ptr<EnvironmentNode> &pNode, IEspNodeInfoType &nodeInfo) const;
     void getNodeInfo(const std::shared_ptr<SchemaItem> &pNodeSchemaItem, IEspNodeInfoType &nodeInfo) const;
-    void getAttributes(const std::vector<std::shared_ptr<EnvironmentValue>> &attributes, IArrayOf<IEspAttributeType> &nodeAttributes) const;
+    void getAttributes(const std::shared_ptr<EnvironmentNode> &pEnvNode, IArrayOf<IEspAttributeType> &nodeAttributes, bool includeMissing = false) const;
     void getNodeDisplayName(const std::shared_ptr<EnvironmentNode> &pNode, std::string &nodeDisplayName) const;
     void getNodeParents(const std::string &nodeId, ConfigMgrSession *pSession, StringArray &parentNodeIds) const;
     void getNodeTree(const std::shared_ptr<EnvironmentNode> &pNode, IEspTreeElementType &treeElement, int levels, bool includeAttributes) const;
