@@ -45,7 +45,7 @@ private:
     Owned<IGroup> group;
     rank_t myrank;
     rank_t commSize;
-    MPI::Comm& comm;
+    hpcc_mpi::MPIComm* comm;
 public:
     IMPLEMENT_IINTERFACE;
 
@@ -84,7 +84,7 @@ public:
                 unsigned remaining;
                 if (tm.timedout(&remaining))
                     return false;
-                hpcc_mpi::CommStatus status = hpcc_mpi::sendData(startrank, tag, mbuf, comm, remaining);
+                hpcc_mpi::CommStatus status = comm->sendData(startrank, tag, mbuf, remaining);
                 if (status != hpcc_mpi::CommStatus::SUCCESS)
                     return false;
         }
@@ -100,7 +100,7 @@ public:
         bool success = false;
 
         tm.timedout(&remaining);
-        hpcc_mpi::CommStatus status = hpcc_mpi::readData(srcrank, tag, mbuf, comm, remaining);
+        hpcc_mpi::CommStatus status = comm->readData(srcrank, tag, mbuf, remaining);
         success = (status == hpcc_mpi::CommStatus::SUCCESS);
         if (success)
         {
@@ -115,13 +115,13 @@ public:
     
     void barrier(void)
     {
-        hpcc_mpi::barrier(comm);
+        comm->barrier();
     }
 
     unsigned probe(rank_t srcrank, mptag_t tag, rank_t *sender, unsigned timeout=0)
     {
         _TF("probe", srcrank, tag, timeout);
-        if (hpcc_mpi::hasIncomingMessage(srcrank, tag, comm))
+        if (comm->hasIncomingMessage(srcrank, tag))
         {
             if (sender)
                 *sender = srcrank;
@@ -172,7 +172,7 @@ public:
         _TF("cancel", srcrank, tag);
         assertex(srcrank!=RANK_NULL);
         //cancel only recv calls?
-        hpcc_mpi::cancelComm(false, srcrank, tag, comm);
+        comm->cancelComm(false, srcrank, tag);
     }
 
     bool verifyConnection(rank_t rank,  unsigned timeout)
@@ -202,18 +202,19 @@ public:
         return group.getLink();
     }
 
-    NodeCommunicator(IGroup *_group, MPI::Comm& _comm): comm(_comm),  group(_group)
+    NodeCommunicator(IGroup *_group, hpcc_mpi::MPIComm& _comm): group(_group)
     {
-        initializeComm(comm);
-
-        commSize = hpcc_mpi::size(comm);
-        myrank = hpcc_mpi::rank(comm);
+        comm = new hpcc_mpi::MPIComm(_comm.get());
+        comm->setErrorHandler(MPI_ERRORS_RETURN);
+        commSize = comm->size();
+        myrank = comm->rank();
 
         assertex(getGroup()->ordinality()==commSize);
     }
     
     ~NodeCommunicator()
     {
+        delete comm;
     }
 };
 
@@ -221,7 +222,9 @@ ICommunicator *createMPICommunicator(IGroup *group)
 {
     if (group)
         group->Link();
-    return new NodeCommunicator(group, MPI::COMM_WORLD);
+    hpcc_mpi::MPIComm comm = hpcc_mpi::MPIComm(MPI_COMM_WORLD);
+    _T("MPI_COMM_WORLD="<<MPI_COMM_WORLD<<" comm.get()"<<comm.get());
+    return new NodeCommunicator(group, comm);
 }
 
 /** MPI framework should be initialized only once. But incase it is initialized
@@ -258,18 +261,9 @@ void stopMPI()
     assertex(mpiInitCounter>=0);
 }
 
-
-void initializeComm(MPI::Comm& comm)
-{
-    _TF("initializeComm");
-    hpcc_mpi::mpiInitializedCheck();
-    hpcc_mpi::setErrorHandler(comm, MPI::ERRORS_THROW_EXCEPTIONS);
-}
-
-
 int getMPIGlobalRank()
 {
     _TF("getMPIGlobalRank");
     hpcc_mpi::mpiInitializedCheck();
-    return hpcc_mpi::rank(MPI::COMM_WORLD);
+    return hpcc_mpi::MPIComm(MPI_COMM_WORLD).rank();
 }

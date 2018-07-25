@@ -31,11 +31,6 @@ extern mp_decl void startMPI();
 extern mp_decl void stopMPI();
 
 /**
- * Initialize the provided MPI communicator
- */
-extern mp_decl void initializeComm(MPI::Comm& comm);
-
-/**
  * Get the global rank among all the MPI hosts
  */
 extern mp_decl int getMPIGlobalRank();

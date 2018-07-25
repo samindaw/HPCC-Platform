@@ -18,7 +18,7 @@
 #include <map>
 #include <vector>
 #include <algorithm>
-#include "mpi.h"
+#include <mpi.h>
 #include "mpbase.hpp"
 #include "mptag.hpp"
 #include "mpbuff.hpp"
@@ -39,85 +39,95 @@ namespace hpcc_mpi
         TIMEDOUT = 4
     };
     
+    class MPIComm{
+    protected:
+        MPI_Comm the_real_comm;
+    public:
+        inline MPIComm(const MPI_Comm &obj) : the_real_comm(obj) {}
+
+        inline MPI_Comm get(){return the_real_comm;}
+        /**
+        * Get the rank of the processor within the MPI communicator in the NodeGroup
+        * @param group      NodeGroup which the processor rank we want to get
+        * @return           rank of the calling node/processor
+        */
+        rank_t rank();
+
+        /**
+        * Get the no of the processors within the MPI communicator in the NodeGroup
+        * @param group      NodeGroup which the number of processors we want to get
+        * @return           number of nodes/processors in the NodeGroup
+        */
+        rank_t size();
+
+        /**
+        * Send data to a destination node/processor
+        * @param dstRank    Rank of the node which we want to send data to
+        * @param tag        Message tag
+        * @param mbuf       The message
+        * @param group      In which nodegroup the destination rank belongs to
+        * @param timeout    Time to complete the communication
+        * @return           Return a CommRequest object which you can use to keep
+        *                   track of the status of this communication call. Use
+        *                   releaseComm(...) function to release this object once
+        *                   done using it.
+        */
+        CommStatus sendData(rank_t dstRank, mptag_t tag, CMessageBuffer &mbuf, unsigned timeout);
+
+        /**
+        * Receive data from a node/processor
+        * @param sourceRank Rank of the node which to receive data from
+        * @param tag        Message tag
+        * @param mbuf       The CMessageBuffer to save the incoming message to
+        * @param group      In which nodegroup the destination rank belongs to
+        * @param timeout    Time to complete the communication
+        * @return           Return a CommRequest object which you can use to keep
+        *                   track of the status of this communication call. Use
+        *                   releaseComm(...) function to release this object once
+        *                   done using it.
+        */
+        CommStatus readData(rank_t &sourceRank, mptag_t &tag, CMessageBuffer &mbuf, unsigned timeout);
+
+        /**
+        * Check to see if there's a incoming message
+        * @param sourceRank Rank of the node (or RANK_ALL) which to receive data from
+        * @param tag        Message tag (or TAG_ALL)
+        * @param group      In which nodegroup the destination rank belongs to
+        * @return           Returns true if there is a incoming message and both
+        *                   sourceRank and tag variables updated.
+        */
+        bool hasIncomingMessage(rank_t &sourceRank, mptag_t &tag);
+
+        /**
+        * Cancel a send/receive communication request
+        * @param send       true=>Send communication, false=>Recv communication
+        * @param rank       Rank of the processor
+        * @param tag        Message tag
+        * @param comm       MPI communicator
+        * @return           True if successfully canceled
+        */
+        bool cancelComm(bool send, rank_t rank, mptag_t mptag);
+
+        /**
+        * Communication barrier
+        * @param group      NodeGroup to put barrier on
+        */
+        void barrier();
+
+        void setErrorHandler(MPI_Errhandler handler = MPI_ERRORS_ARE_FATAL);
+
+    };
+
     /**
      * Initialize MPI framework
      * @param withMultithreading     (optional, default=false) initialize with multi-threaded support
      */
     void initialize();
 
-    void setErrorHandler(MPI::Comm& comm, MPI::Errhandler handler = MPI::ERRORS_ARE_FATAL);
     /**
      * tear-down the MPI framework
      */
     void finalize();
-
-    /**
-    * Get the rank of the processor within the MPI communicator in the NodeGroup
-    * @param group      NodeGroup which the processor rank we want to get
-    * @return           rank of the calling node/processor
-    */
-    rank_t rank(const MPI::Comm& comm);
-
-    /**
-    * Get the no of the processors within the MPI communicator in the NodeGroup
-    * @param group      NodeGroup which the number of processors we want to get
-    * @return           number of nodes/processors in the NodeGroup
-    */
-    rank_t size(const MPI::Comm& comm);
-    
-    /**
-    * Send data to a destination node/processor
-    * @param dstRank    Rank of the node which we want to send data to
-    * @param tag        Message tag
-    * @param mbuf       The message
-    * @param group      In which nodegroup the destination rank belongs to
-    * @param timeout    Time to complete the communication
-    * @return           Return a CommRequest object which you can use to keep
-    *                   track of the status of this communication call. Use
-    *                   releaseComm(...) function to release this object once
-    *                   done using it.
-    */
-    CommStatus sendData(rank_t dstRank, mptag_t tag, CMessageBuffer &mbuf, const MPI::Comm& comm, unsigned timeout);
-
-    /**
-    * Receive data from a node/processor
-    * @param sourceRank Rank of the node which to receive data from
-    * @param tag        Message tag
-    * @param mbuf       The CMessageBuffer to save the incoming message to
-    * @param group      In which nodegroup the destination rank belongs to
-    * @param timeout    Time to complete the communication
-    * @return           Return a CommRequest object which you can use to keep
-    *                   track of the status of this communication call. Use
-    *                   releaseComm(...) function to release this object once
-    *                   done using it.
-    */
-    CommStatus readData(rank_t &sourceRank, mptag_t &tag, CMessageBuffer &mbuf, const MPI::Comm& comm, unsigned timeout);
-    
-    /**
-    * Check to see if there's a incoming message
-    * @param sourceRank Rank of the node (or RANK_ALL) which to receive data from
-    * @param tag        Message tag (or TAG_ALL)
-    * @param group      In which nodegroup the destination rank belongs to
-    * @return           Returns true if there is a incoming message and both 
-    *                   sourceRank and tag variables updated.
-    */    
-    bool hasIncomingMessage(rank_t &sourceRank, mptag_t &tag, const MPI::Comm& comm);
-    
-    /**
-    * Cancel a send/receive communication request
-    * @param send       true=>Send communication, false=>Recv communication
-    * @param rank       Rank of the processor
-    * @param tag        Message tag
-    * @param comm       MPI communicator
-    * @return           True if successfully canceled
-    */    
-    bool cancelComm(bool send, rank_t rank, mptag_t mptag, const MPI::Comm& comm);
-    
-    /**
-    * Communication barrier 
-    * @param group      NodeGroup to put barrier on
-    */    
-    void barrier(const MPI::Comm& comm);
 
     void mpiInitializedCheck(bool isInitialized=true);
 
