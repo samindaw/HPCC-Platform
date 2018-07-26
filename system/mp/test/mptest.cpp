@@ -1602,13 +1602,7 @@ int main(int argc, char* argv[])
         StringBuffer lf;
         startMPI();
         rank_t tot_ranks = 0;
-        int basePort = atoi(argL[1]);
-
-
-        int my_port = getServerPort(basePort);
-        char logfile[256] = { "" };
-        sprintf(logfile,"mptest-%d.log",my_port);
-        openLogFile(lf, logfile);
+        int my_port = atoi(argL[1]);
 
         IArrayOf<INode> nodes;
 
@@ -1704,6 +1698,11 @@ int main(int argc, char* argv[])
                 }
                 j++;
             }
+            if (useMPI || !(useMP || useMPI))
+            {
+                startMPI();
+                my_port = getServerPort(my_port);
+            }
             if (!createNodeList(nodes, hostfile, my_port, parameters[PARAM_MAX_RANKS].getRank()))
             {
                 stopMPI();
@@ -1721,6 +1720,9 @@ int main(int argc, char* argv[])
                 i++;
             }
         }
+        char logfile[256] = { "" };
+        sprintf(logfile,"mptest-%d.log",my_port);
+        openLogFile(lf, logfile);
         tot_ranks = nodes.length();
         if (startupDelay)
         {
@@ -1773,13 +1775,15 @@ int main(int argc, char* argv[])
         }
 
         stopMPServer();
-        stopMPI();
     }
     catch (IException *e)
     {
-        stopMPI();
         pexception("Exception",e);
         e->Release();
+    }
+    if (useMPI || !(useMP || useMPI))
+    {
+        stopMPI();
     }
 
     PROGLOG("MPTEST: bye");
