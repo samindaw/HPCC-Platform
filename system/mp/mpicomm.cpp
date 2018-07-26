@@ -49,7 +49,7 @@ private:
 public:
     IMPLEMENT_IINTERFACE;
 
-    bool send(CMessageBuffer &mbuf, rank_t dstrank, mptag_t tag, unsigned timeout)
+    virtual bool send(CMessageBuffer &mbuf, rank_t dstrank, mptag_t tag, unsigned timeout)
     {
         _TF("send", dstrank, tag, mbuf.getReplyTag(), timeout);
         assertex(dstrank!=RANK_NULL);
@@ -60,39 +60,44 @@ public:
         {
             startrank = 0;
             endrank = commSize-1;
-        } else if (dstrank==RANK_RANDOM)
+        }
+        else if (dstrank==RANK_RANDOM)
         {
             if (commSize>1)
             {
                 do
                 {
                     startrank = getRandom()%commSize;
-                } while (startrank==myrank);
-            } else
+                }
+                while (startrank==myrank);
+            }
+            else
             {
                 assertex(myrank!=0);
                 startrank = 0;
             }
             endrank = startrank;
-        } else {
+        }
+        else
+        {
             endrank = startrank;
         }
         for (;startrank<=endrank;startrank++)
         {
-                if ((startrank==myrank) && (dstrank==RANK_ALL_OTHER))
-                    continue;
-                unsigned remaining;
-                if (tm.timedout(&remaining))
-                    return false;
-                hpcc_mpi::CommStatus status = comm->sendData(startrank, tag, mbuf, remaining);
-                if (status != hpcc_mpi::CommStatus::SUCCESS)
-                    return false;
+            if ((startrank==myrank) && (dstrank==RANK_ALL_OTHER))
+                continue;
+            unsigned remaining;
+            if (tm.timedout(&remaining))
+                return false;
+            hpcc_mpi::CommStatus status = comm->sendData(startrank, tag, mbuf, remaining);
+            if (status != hpcc_mpi::CommStatus::SUCCESS)
+                return false;
         }
        
         return true;
     }
 
-    bool recv(CMessageBuffer &mbuf, rank_t srcrank, mptag_t tag, rank_t *sender, unsigned timeout=MP_WAIT_FOREVER)
+    virtual bool recv(CMessageBuffer &mbuf, rank_t srcrank, mptag_t tag, rank_t *sender, unsigned timeout=MP_WAIT_FOREVER)
     {
         _TF("recv", srcrank, tag, timeout);
         CTimeMon tm(timeout);
@@ -113,12 +118,12 @@ public:
         return success;
     }
     
-    void barrier(void)
+    virtual void barrier(void)
     {
         comm->barrier();
     }
 
-    unsigned probe(rank_t srcrank, mptag_t tag, rank_t *sender, unsigned timeout=0)
+    virtual unsigned probe(rank_t srcrank, mptag_t tag, rank_t *sender, unsigned timeout=0)
     {
         _TF("probe", srcrank, tag, timeout);
         if (comm->hasIncomingMessage(srcrank, tag))
@@ -129,12 +134,12 @@ public:
         return false;
     }
     
-    void flush(mptag_t tag)
+    virtual void flush(mptag_t tag)
     {
         // Handled by MPI
     }
 
-    bool sendRecv(CMessageBuffer &mbuff, rank_t sendrank, mptag_t sendtag, unsigned timeout=MP_WAIT_FOREVER)
+    virtual bool sendRecv(CMessageBuffer &mbuff, rank_t sendrank, mptag_t sendtag, unsigned timeout=MP_WAIT_FOREVER)
     {
         _TF("sendRecv", sendrank, sendtag, timeout);
         //TODO share timeout between send/recv?
@@ -150,7 +155,7 @@ public:
         return recv(mbuff,sendrank,replytag,NULL,remaining);
     }
 
-    bool reply(CMessageBuffer &mbuf, unsigned timeout=MP_WAIT_FOREVER)
+    virtual bool reply(CMessageBuffer &mbuf, unsigned timeout=MP_WAIT_FOREVER)
     {
         _TF("reply", mbuf.getReplyTag(), timeout);
         mptag_t replytag = mbuf.getReplyTag();
@@ -167,37 +172,37 @@ public:
         return false;
     }
 
-    void cancel(rank_t srcrank, mptag_t tag)
+    virtual void cancel(rank_t srcrank, mptag_t tag)
     {
         _TF("cancel", srcrank, tag);
         assertex(srcrank!=RANK_NULL);
         //cancel only recv calls?
-        comm->cancelComm(false, srcrank, tag);
+        comm->cancelComm(srcrank, tag);
     }
 
-    bool verifyConnection(rank_t rank,  unsigned timeout)
+    virtual bool verifyConnection(rank_t rank,  unsigned timeout)
     {
         // TODO: revisit to see how MPI behaves here
         return true;
     }
 
-    bool verifyAll(bool duplex, unsigned timeout)
+    virtual bool verifyAll(bool duplex, unsigned timeout)
     {
         // TODO: revisit to see how MPI behaves here
         return true;
     }
     
-    void disconnect(INode *node)
+    virtual void disconnect(INode *node)
     {
         UNIMPLEMENTED;
     }
 
-    IGroup &queryGroup()
+    virtual IGroup &queryGroup()
     {
         return *group;
     }
     
-    IGroup *getGroup()
+    virtual IGroup *getGroup()
     {
         return group.getLink();
     }
@@ -223,7 +228,6 @@ ICommunicator *createMPICommunicator(IGroup *group)
     if (group)
         group->Link();
     hpcc_mpi::MPIComm comm = hpcc_mpi::MPIComm(MPI_COMM_WORLD);
-    _T("MPI_COMM_WORLD="<<MPI_COMM_WORLD<<" comm.get()"<<comm.get());
     return new NodeCommunicator(group, comm);
 }
 

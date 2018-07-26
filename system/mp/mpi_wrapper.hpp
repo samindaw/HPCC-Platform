@@ -106,7 +106,7 @@ namespace hpcc_mpi
         * @param comm       MPI communicator
         * @return           True if successfully canceled
         */
-        bool cancelComm(bool send, rank_t rank, mptag_t mptag);
+        bool cancelComm(rank_t rank, mptag_t mptag);
 
         /**
         * Communication barrier
@@ -114,13 +114,16 @@ namespace hpcc_mpi
         */
         void barrier();
 
-        void setErrorHandler(MPI_Errhandler handler = MPI_ERRORS_ARE_FATAL);
+        /**
+        * Set the error handler for MPI. Does not support C++ bindings
+        * @param handler    Error handler for MPI.
+        */
+        void setErrorHandler(MPI_Errhandler handler);
 
     };
 
     /**
      * Initialize MPI framework
-     * @param withMultithreading     (optional, default=false) initialize with multi-threaded support
      */
     void initialize();
 
@@ -129,8 +132,18 @@ namespace hpcc_mpi
      */
     void finalize();
 
+    /**
+    * Assert that MPI is (not) initialized
+    * @param isInitialized      True - assert initialization (default)
+    *                           False - assert not being initialized
+    */
     void mpiInitializedCheck(bool isInitialized=true);
 
+    /**
+    * Assert that MPI is (not) finalized
+    * @param isInitialized      True - assert finalized (default)
+    *                           False - assert not being finalized
+    */
     void mpiFinalizedCheck(bool isFinalized=true);
 }
 
