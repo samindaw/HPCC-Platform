@@ -162,7 +162,7 @@ public:
         rank_t dstrank = getGroup()->rank(mbuf.getSender());
         if (dstrank!=RANK_NULL)
         {
-            if (send (mbuf, dstrank, replytag,timeout))
+            if (send(mbuf, dstrank, replytag,timeout))
             {
                 mbuf.setReplyTag(TAG_NULL);
                 return true;

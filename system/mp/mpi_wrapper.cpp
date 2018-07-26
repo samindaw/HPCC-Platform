@@ -22,21 +22,20 @@ private:
     bool cancellationLock = false;
     bool cancellationInProgress = false;
     MPI_Request req;           // persistent request object to keep track of ongoing MPI call
+    const hpcc_mpi::MPIComm& comm;                // MPI communicator
 
     CriticalSection dataChangeLock;
     void lock(){dataChangeLock.enter();}
     void unlock(){dataChangeLock.leave();}
 
 public:    
+    int rank;                       // source/destination rank of the processor
+    int tag;                        // MPI tag information
+
     bool isEqual(int _rank, int _tag)
     {
         return (_rank==MPI_ANY_SOURCE || rank==_rank) && (_tag==MPI_ANY_TAG || tag==_tag);
     }
-
-    int rank;                       // source/destination rank of the processor
-    int tag;                        // MPI tag information
-    const hpcc_mpi::MPIComm& comm;                // MPI communicator
-
 
     CommData(int _rank, int _tag, const hpcc_mpi::MPIComm& _comm):
         rank(_rank), tag(_tag), comm(_comm){}
@@ -203,7 +202,7 @@ MPI_Status waitToComplete( bool& completed, bool& error, bool& canceled, bool& t
     CTimeMon tm(timeout);
     MPI_Status stat;
     unsigned remaining;
-    bool noCancellation;
+    bool noCancellation = true;
     int flag;
     while (!(completed || error || (timedout = tm.timedout(&remaining))) && (noCancellation = commData->lockFromCancellation()))
     {
@@ -234,7 +233,7 @@ MPI_Status hasIncomingData(int sourceRank, int mptag, hpcc_mpi::MPIComm& comm,
 
     int flag;
     unsigned remaining;
-    bool noCancellation;
+    bool noCancellation = true;
     while (!(incomingMessage || error || (timeout !=0 && tm.timedout(&remaining))) && (noCancellation = commData->lockFromCancellation()))
     {
         MPI_Iprobe(sourceRank, mptag, comm.get(), &flag, &stat);
