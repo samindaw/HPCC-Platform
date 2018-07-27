@@ -13,6 +13,9 @@
 #define WAIT_DELAY 100
 #define PROBING_DELAY 100
 
+//#define USE_BLOCK_SEND
+//#define USE_BLOCK_RECV
+
 //----------Functions and Data structures managing communication data related to Send/Recv Communications in orogress-----------//
 
 // Data structure to keep the data relating to send/receive communications
@@ -402,7 +405,11 @@ hpcc_mpi::CommStatus hpcc_mpi::MPIComm::sendData(rank_t dstRank, mptag_t mptag, 
     MPI_Request req;
     while(!bufferedSendComplete && !canceled && !(timedout = tm.timedout(&remaining)))
     {
+#ifdef USE_BLOCK_SEND
+        int error = MPI_Send(mbuf.bufferBase(), mbuf.length(), MPI_BYTE, target, tag, this->get());
+#else
         int error = MPI_Ibsend(mbuf.bufferBase(), mbuf.length(), MPI_BYTE, target, tag, this->get(), &req);
+#endif
         int errorClass;
         MPI_Error_class(error, &errorClass);
         if (errorClass == MPI_SUCCESS)
@@ -454,13 +461,23 @@ hpcc_mpi::CommStatus hpcc_mpi::MPIComm::readData(rank_t &sourceRank, mptag_t &mp
         bool notCanceled = commData->lockFromCancellation();
         if (notCanceled)
         {
+#ifdef USE_BLOCK_RECV
+            int errorCode = MPI_Recv(mbuf.bufferBase(), mbuf.length(), MPI_BYTE, source, tag, this->get(), &stat);
+            int errorClass;
+            MPI_Error_class(errorCode, &errorClass);
+            completed = (errorClass == MPI_SUCCESS);
+            error = !completed;
+#else
             MPI_Irecv(mbuf.bufferBase(), mbuf.length(), MPI_BYTE, source, tag, this->get(), commData->request());
+#endif
             commData->releaseCancellationLock();
         }
         canceled = !notCanceled;
         tm.timedout(&remaining);
 
+#ifndef USE_BLOCK_RECV
         MPI_Status stat = waitToComplete(completed, error, canceled, timedout, remaining, commData);
+#endif
         if (!canceled)
         {   //if it was canceled by another thread commData would have cleanedup after itself so nothing to do here.
             if (!error && completed)
