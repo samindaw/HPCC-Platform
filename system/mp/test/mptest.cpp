@@ -42,6 +42,10 @@ using namespace std;
 #define PARAM_PERSTREAM_MB_SIZE "perStreamMBSize"
 #define PARAM_ASYNC "async"
 
+#define TAG_BENCHMARK "BENCHMARK"
+
+static bool benchmark = false;
+
 class CSectionTimer
 {
     HiresTimer hrt[1000];
@@ -629,6 +633,43 @@ void MPRing(IGroup *group, ICommunicator *mpicomm, unsigned iters=0)
 
 #define MSGLEN 1048576
 
+double getAverage(std::vector<double> &values)
+{
+    double total = 0.0;
+    for (auto &v: values)
+        total += v;
+    return (total / values.size());
+}
+
+void gatherAll(ICommunicator *mpicomm, double myvalue, rank_t destination, std::vector<double> &results)
+{
+    rank_t myrank = mpicomm->getGroup()->rank();
+    CMessageBuffer msg;
+    if (myrank == destination)
+    {
+        results.clear();
+        double remoteValue;
+        for(size_t i=0; i<mpicomm->getGroup()->ordinality(); i++)
+        {
+            if (i == myrank)
+                remoteValue = myvalue;
+            else
+            {
+                msg.clear();
+                mpicomm->recv(msg,i,MPTAG_TEST);
+                msg.read(remoteValue);
+            }
+            results.push_back(remoteValue);
+        }
+    }
+    else
+    {
+        msg.append(myvalue);
+        mpicomm->send(msg,destination,MPTAG_TEST);
+    }
+    mpicomm->barrier();
+}
+
 void MPAlltoAll(IGroup *group, ICommunicator *mpicomm, size32_t buffsize=0, unsigned iters=0)
 {
     rank_t myrank = group->rank();
@@ -724,6 +765,18 @@ void MPAlltoAll(IGroup *group, ICommunicator *mpicomm, size32_t buffsize=0, unsi
     double msgRateMB = (2.0*(double)buffsize*(double)iters*(double)(numranks-1)) / ((endTime-startTime)*1000.0);
 
     PROGLOG("MPTEST: MPAlltoAll complete %g MB/s", msgRateMB);
+
+    if (benchmark)
+    {
+        std::vector<double> msgRates;
+        gatherAll(mpicomm, msgRateMB, 0, msgRates);
+        if (group->rank() == 0)
+        {
+            unsigned totalTime = endTime - startTime;
+            double avgMsgRate = getAverage(msgRates);
+            printf("%s\tALLTOALL\t%d\t%u\t%u\t%f\t%u\n", TAG_BENCHMARK, numranks, buffsize, iters, avgMsgRate, totalTime);
+        }
+    }
 }
 
 void MPTest2(IGroup *group, ICommunicator *mpicomm)
@@ -1507,7 +1560,7 @@ int getServerPort(int basePort)
 }
 
 void printHelp(char* executableName) {
-    printf("\nMPTEST: Usage: %s <myport> [-f <hostfile> [-t <testname> -b <buffsize> -i <iters> -r <rank> -n <numprocs> -d] | <ip:port> <ip:port>] [-mpi] [-mp]\n\n",executableName);
+    printf("\nMPTEST: Usage: %s <myport> [-f <hostfile> [-t <testname> -b <buffsize> -i <iters> -r <rank> -n <numprocs> -d] | <ip:port> <ip:port>] [-mpi] [-mp] [--benchmark]\n\n",executableName);
     std::vector<std::string> tests = { TEST_RANK, TEST_SELFSEND, TEST_MULTI,
             TEST_STREAM, TEST_RING, TEST_AlltoAll, TEST_SINGLE_SEND,
             TEST_RIGHT_SHIFT, TEST_RECV_FROM_ANY, TEST_SEND_TO_ALL,
@@ -1696,6 +1749,8 @@ int main(int argc, char* argv[])
                         j++;
                     }
                 }
+                else if (streq(argv[j], "--benchmark"))
+                    benchmark = true;
                 j++;
             }
             if (useMPI || !(useMP || useMPI))
