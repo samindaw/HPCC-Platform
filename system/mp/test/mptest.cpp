@@ -45,6 +45,7 @@ using namespace std;
 #define TAG_BENCHMARK "BENCHMARK"
 
 static bool benchmark = false;
+static std::string benchmarkString="";
 
 class CSectionTimer
 {
@@ -766,17 +767,8 @@ void MPAlltoAll(IGroup *group, ICommunicator *mpicomm, size32_t buffsize=0, unsi
 
     PROGLOG("MPTEST: MPAlltoAll complete %g MB/s", msgRateMB);
 
-    if (benchmark)
-    {
-        std::vector<double> msgRates;
-        gatherAll(mpicomm, msgRateMB, 0, msgRates);
-        if (group->rank() == 0)
-        {
-            unsigned totalTime = endTime - startTime;
-            double avgMsgRate = getAverage(msgRates);
-            printf("%s\tALLTOALL\t%d\t%u\t%u\t%f\t%u\n", TAG_BENCHMARK, numranks, buffsize, iters, avgMsgRate, totalTime);
-        }
-    }
+    if (benchmark && (group->rank() == 0))
+        printf("%s\tALLTOALL\t%d\t%u\t%u\t%f\t%u\n", benchmarkString.c_str(), numranks, buffsize, iters, msgRateMB, (endTime-startTime));
 }
 
 void MPTest2(IGroup *group, ICommunicator *mpicomm)
@@ -898,7 +890,6 @@ void MPReceiveFromAny(ICommunicator* comm, rank_t nodeRank)
     rank_t rank = group->rank();
     rank_t destinationRank = (p-1);
     double expectedValue = 1234.0;
-    _T("nodeRank="<<nodeRank);
     if (rank == nodeRank)
     {
         CMessageBuffer sendMsg;
@@ -913,7 +904,6 @@ void MPReceiveFromAny(ICommunicator* comm, rank_t nodeRank)
         assertex(success);
         double receivedValue;
         recvMsg.read(receivedValue);
-        _T("rank="<<comm->getGroup()->rank(recvMsg.getSender())<<" nodeRank="<<nodeRank);
         assertex(nodeRank == comm->getGroup()->rank(recvMsg.getSender()));
         assertex(expectedValue == receivedValue);
         PROGLOG("Message successfully received from node %d to node %d.", comm->getGroup()->rank(recvMsg.getSender()), rank);
@@ -989,7 +979,7 @@ void MPMultiMTSendRecv(ICommunicator* comm, int counter)
                         break;
                     }
                 }
-                _T("This thread sent "<<served);
+                PROGLOG("This thread sent %u",served);
                 return 0;
             }
         };
@@ -1022,14 +1012,13 @@ void MPMultiMTSendRecv(ICommunicator* comm, int counter)
                         served++;
                     }
                 }
-                _T("This thread received "<<served);
+                PROGLOG("This thread received %u",served);
                 return 0;
             }
         };
         std::vector<Thread*> workers;
         int s_counter, r_counter;
         s_counter = r_counter = counter;
-        _T("counter="<<counter);
         for(int i=0;i<SEND_THREADS; i++)
             workers.push_back(new SWorker(comm, &s_counter));
         for(int i=0;i<RECV_THREADS; i++)
@@ -1308,6 +1297,16 @@ void MPNxN(ICommunicator *comm, unsigned numStreams, size32_t perStreamMBSize, s
                 float ms = timer.elapsedMs();
                 float mbPerSec = (totalSendSize/ms*1000)/0x100000;
                 PROGLOG("Stream stats: time taken = %.2f seconds, total sent=%u MB, throughput = %.2f MB/s", ms/1000, (unsigned)(totalSendSize/0x100000), mbPerSec);
+                if (benchmark)
+                {
+                    std::vector<double> msgRates;
+                    gatherAll(comm, (double)mbPerSec, 0, msgRates);
+                    if (comm->getGroup()->rank() == 0)
+                    {
+                        double avgMsgRate = getAverage(msgRates);
+                        printf("%s\tNxN\t%u\t%llu\t%d\t%f\t%f\n", benchmarkString.c_str(), grpSize, totalSendSize, msgSize, avgMsgRate, (ms/1000));
+                    }
+                }
             }
             catch (IException *e)
             {
@@ -1477,7 +1476,7 @@ void runTest(const char *caption, const char *testname, const Owned<IGroup>& gro
 {
     if (group.get()->rank()==0)
     {
-        printf("\n\n");
+        PROGLOG("\n\n");
         PROGLOG("%s %s", caption, testname);
         PROGLOG("========================");
     }
@@ -1820,11 +1819,13 @@ int main(int argc, char* argv[])
         Owned<ICommunicator> comm;
         if (useMP || !(useMP || useMPI))
         {
+            if (benchmark) benchmarkString = "MP:" + std::string(TAG_BENCHMARK);
             comm.setown(createCommunicator(group));
             runTest("MPTEST: Running MP Test:", testname, group, comm, parameters);
         }
         if (useMPI || !(useMP || useMPI))
         {
+            if (benchmark) benchmarkString = "MPI:" + std::string(TAG_BENCHMARK);
             comm.setown(createMPICommunicator(group));
             runTest("MPTEST: Running MPI Test:", testname, group, comm, parameters);
         }
