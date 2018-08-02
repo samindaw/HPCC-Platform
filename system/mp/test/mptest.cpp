@@ -44,6 +44,8 @@ using namespace std;
 
 #define TAG_BENCHMARK "BENCHMARK"
 
+#define MSGLEN 1048576
+
 static bool benchmark = false;
 static std::string benchmarkString="";
 
@@ -190,24 +192,37 @@ void StreamTest(IGroup *group,ICommunicator *comm)
 }
 
 
-void Test1(IGroup *group,ICommunicator *comm)
+void Test1(IGroup *group,ICommunicator *comm, size32_t buffsize=0, unsigned iters=0)
 { 
     PROGLOG("test1");
-    CMessageBuffer mb;
+    if (buffsize == 0)
+        buffsize = MSGLEN;
+    if (iters == 0)
+        iters = 100;
+    unsigned startTime = msTick();
     if (group->rank()==0)
     {
-        mb.append("Hello - Test1");
-        comm->send(mb,1,MPTAG_TEST);
+        CMessageBuffer mb;
+        mb.appendBytes('a', buffsize);
+        for (unsigned k=1;k<=iters;k++)
+            comm->send(mb,1,MPTAG_TEST);
     }
     else if (group->rank()==1)
     {
         rank_t r;
-        comm->recv(mb,0,MPTAG_TEST,&r);
-        StringAttr str;
-        mb.read(str);
-        PROGLOG("(1) Received '%s' from rank %u",str.get(),r);
+        for (unsigned k=1;k<=iters;k++)
+        {
+            CMessageBuffer mb;
+            comm->recv(mb,0,MPTAG_TEST,&r);
+            assertex(mb.length() == buffsize);
+        }
+        PROGLOG("(1) Received %u bytes from rank %u, %u times",buffsize,0, iters);
     }
     comm->barrier();
+    unsigned endTime = msTick();
+    double msgRateMB = (double)buffsize / ((endTime-startTime)*1000.0);
+    if (group->rank() == 0 && benchmark)
+        printf("%s\tSINGLESEND\t%d\t%u\t%u\t%f\t%u\n", benchmarkString.c_str(), group->ordinality(), buffsize, iters, msgRateMB, (endTime-startTime));
 }
 
 
@@ -631,8 +646,6 @@ void MPRing(IGroup *group, ICommunicator *mpicomm, unsigned iters=0)
 
     mpicomm->barrier();
 }
-
-#define MSGLEN 1048576
 
 double getAverage(std::vector<double> &values)
 {
@@ -1496,7 +1509,8 @@ void runTest(const char *caption, const char *testname, const Owned<IGroup>& gro
     else if (strieq(testname, TEST_SELFSEND))
         MPSelfSend(comm);
     else if (strieq(testname, TEST_SINGLE_SEND) )
-        Test1(group, comm);
+        Test1(group, comm, parameters[PARAM_BUFF_SIZE].getSize(),
+                parameters[PARAM_NUM_ITERS].getUnsigned());
     else if (strieq(testname, TEST_RIGHT_SHIFT) )
         MPRightShift(comm);
     else if (strieq(testname, TEST_RECV_FROM_ANY) )
@@ -1790,6 +1804,8 @@ int main(int argc, char* argv[])
         IpAddress myIp;
         GetHostIp(myIp);
         SocketEndpoint myEp(my_port, myIp);
+        StringBuffer ipStr;
+        myEp.getIpText(ipStr);
 
         bool die = true;
         for (rank_t k=0;k<tot_ranks;k++)
@@ -1803,7 +1819,7 @@ int main(int argc, char* argv[])
             stopMPI();
             return 0;
         }
-        PROGLOG("MPTEST: Starting, port = %d tot ranks = %u", my_port, tot_ranks);
+        PROGLOG("MPTEST: Starting, Ip = %s port = %d tot ranks = %u", ipStr.str(), my_port, tot_ranks);
         startMPServer(my_port);
 
         if (mpi_debug)
