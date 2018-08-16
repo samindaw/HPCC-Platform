@@ -51,7 +51,6 @@ public:
 
     virtual bool send(CMessageBuffer &mbuf, rank_t dstrank, mptag_t tag, unsigned timeout)
     {
-        _TF("send", dstrank, tag, mbuf.getReplyTag(), timeout);
         assertex(dstrank!=RANK_NULL);
         CTimeMon tm(timeout);
         rank_t startrank = dstrank;
@@ -99,7 +98,6 @@ public:
 
     virtual bool recv(CMessageBuffer &mbuf, rank_t srcrank, mptag_t tag, rank_t *sender, unsigned timeout=MP_WAIT_FOREVER)
     {
-        _TF("recv", srcrank, tag, timeout);
         CTimeMon tm(timeout);
         unsigned remaining;
         bool success = false;
@@ -125,7 +123,6 @@ public:
 
     virtual unsigned probe(rank_t srcrank, mptag_t tag, rank_t *sender, unsigned timeout=0)
     {
-        _TF("probe", srcrank, tag, timeout);
         if (comm->hasIncomingMessage(srcrank, tag))
         {
             if (sender)
@@ -141,7 +138,6 @@ public:
 
     virtual bool sendRecv(CMessageBuffer &mbuff, rank_t sendrank, mptag_t sendtag, unsigned timeout=MP_WAIT_FOREVER)
     {
-        _TF("sendRecv", sendrank, sendtag, timeout);
         //TODO share timeout between send/recv?
         mptag_t replytag = createReplyTag();
         CTimeMon tm(timeout);
@@ -157,7 +153,6 @@ public:
 
     virtual bool reply(CMessageBuffer &mbuf, unsigned timeout=MP_WAIT_FOREVER)
     {
-        _TF("reply", mbuf.getReplyTag(), timeout);
         mptag_t replytag = mbuf.getReplyTag();
         rank_t dstrank = getGroup()->rank(mbuf.getSender());
         if (dstrank!=RANK_NULL)
@@ -174,7 +169,6 @@ public:
 
     virtual void cancel(rank_t srcrank, mptag_t tag)
     {
-        _TF("cancel", srcrank, tag);
         assertex(srcrank!=RANK_NULL);
         //cancel only recv calls?
         comm->cancelComm(srcrank, tag);
@@ -242,7 +236,6 @@ CriticalSection initCounterBlock;
 void startMPI()
 {
     //Only initialize the framework once
-    _TF("startMPI");
     CriticalBlock block(initCounterBlock);
     if (!mpiInitCounter)
         hpcc_mpi::initialize();
@@ -253,7 +246,6 @@ void startMPI()
 void stopMPI()
 {
     //Only finalize the framework once when everyone had requested to finalize it.
-    _TF("stopMPI");
     CriticalBlock block(initCounterBlock);
     mpiInitCounter--;
     if (mpiInitCounter == 0)
@@ -267,7 +259,6 @@ void stopMPI()
 
 int getMPIGlobalRank()
 {
-    _TF("getMPIGlobalRank");
     hpcc_mpi::mpiInitializedCheck();
     return hpcc_mpi::MPIComm(MPI_COMM_WORLD).rank();
 }
